@@ -6,6 +6,21 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const TOKEN2 = process.env.TOKEN2;
 const CLIENT_ID = process.env.CLIENT_ID;
 
+// --- Express keep-alive server ---
+const express = require('express');
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Tournabot is running!');
+});
+
+app.listen(PORT, () => {
+  console.log(`Express server running on port ${PORT}`);
+});
+
+
 const userBracketState = new Map();
 const brackets = new Map();
 const checkIns = new Map();
