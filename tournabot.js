@@ -1,7 +1,12 @@
 // stuff my code needs ig
-const { Client, GatewayIntentBits, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, EmbedBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, EmbedBuilder, REST, Routes, ActivityType } = require('discord.js');
 const { createCanvas } = require('canvas');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
+
+client.on('ready', () => {
+  client.user.setActivity('esports', { type: ActivityType.Competing });
+  console.log(`✅ Status set: Competing in esports`);
+});
 
 const TOKEN2 = process.env.TOKEN2;
 const CLIENT_ID = process.env.CLIENT_ID;
