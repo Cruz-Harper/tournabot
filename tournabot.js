@@ -8,16 +8,32 @@ client.on('ready', () => {
   console.log(`✅ Status set: Competing in esports`);
 });
 
-client.on('guildCreate', (guild) => {
-  const channel = guild.systemChannel || guild.channels.cache.find(
-    ch => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages')
+client.on('guildCreate', async (guild) => {
+  // Try to find a text channel the bot can send messages in
+  const channel = guild.channels.cache.find(
+    ch =>
+      ch.type === 0 && // text channels only
+      ch.permissionsFor(guild.members.me).has(['ViewChannel', 'SendMessages'])
   );
 
+  const welcomeMessage = `🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`;
+
   if (channel) {
-    channel.send(`🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`);
-    console.log(`📥 Joined new server: ${guild.name}`);
+    try {
+      await channel.send(welcomeMessage);
+      console.log(`📥 Sent welcome message in ${guild.name}`);
+    } catch (err) {
+      console.warn(`⚠️ Tried to send in ${channel.name}, but failed:`, err.message);
+    }
   } else {
-    console.log(`📥 Joined ${guild.name}, but couldn’t find a text channel to send a welcome message.`);
+    console.log(`⚠️ No suitable channel found in ${guild.name}. Trying to DM the owner...`);
+    try {
+      const owner = await guild.fetchOwner();
+      await owner.send(welcomeMessage);
+      console.log(`📩 Sent welcome DM to ${owner.user.tag}`);
+    } catch (err) {
+      console.warn(`❌ Couldn't DM the owner of ${guild.name}:`, err.message);
+    }
   }
 });
 
