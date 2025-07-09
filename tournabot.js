@@ -8,6 +8,19 @@ client.on('ready', () => {
   console.log(`✅ Status set: Competing in esports`);
 });
 
+client.on('guildCreate', (guild) => {
+  const channel = guild.systemChannel || guild.channels.cache.find(
+    ch => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages')
+  );
+
+  if (channel) {
+    channel.send(`🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`);
+    console.log(`📥 Joined new server: ${guild.name}`);
+  } else {
+    console.log(`📥 Joined ${guild.name}, but couldn’t find a text channel to send a welcome message.`);
+  }
+});
+
 const TOKEN2 = process.env.TOKEN2;
 const CLIENT_ID = process.env.CLIENT_ID;
 
