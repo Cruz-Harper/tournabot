@@ -1,23 +1,62 @@
-// stuff my code needs ig
-const { Client, GatewayIntentBits, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, EmbedBuilder, REST, Routes, ActivityType } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  PermissionsBitField,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  SlashCommandBuilder,
+  EmbedBuilder,
+  REST,
+  Routes,
+  ActivityType,
+} = require('discord.js');
 const { createCanvas } = require('canvas');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
+});
 
 client.on('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
-  // Function to update bot status
-  const updateStatus = () => {
-    const serverCount = client.guilds.cache.size;
-    client.user.setActivity(`in ${serverCount} servers`, {
+  const statuses = [
+    () => ({ name: 'esports', type: ActivityType.Competing }),
+    () => ({
+      name: `in ${client.guilds.cache.size} servers`,
       type: ActivityType.Watching,
-    });
-    console.log(`🟢 Status updated: in ${serverCount} servers`);
+    }),
+    () => ({
+      name: '/startbracket to begin',
+      type: ActivityType.Playing,
+    }),
+  ];
+
+  let i = 0;
+  const updateStatus = () => {
+    const status = statuses[i % statuses.length]();
+    client.user.setActivity(status.name, { type: status.type });
+    console.log(`🟢 Status updated: ${status.name}`);
+    i++;
   };
 
-  updateStatus(); // Set status on start
-  setInterval(updateStatus, 5 * 60 * 1000); // Update every 5 minutes
+  updateStatus(); // Set first status
+  setInterval(updateStatus, 5 * 60 * 1000); // Rotate every 5 minutes
 });
+
+client.on('guildCreate', async (guild) => {
+  const channel = guild.channels.cache.find(
+    (ch) =>
+      ch.type === 0 && // text channel
+      ch
+        .permissionsFor(guild.members.me)
+        .has(['ViewChannel', 'SendMessages'])
+  );
 
   const welcomeMessage = `🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`;
 
@@ -35,7 +74,7 @@ client.on('ready', () => {
       await owner.send(welcomeMessage);
       console.log(`📩 Sent welcome DM to ${owner.user.tag}`);
     } catch (err) {
-      console.warn(`❌ Couldn't DM the owner of ${guild.name}:`, err.message);
+      console.warn(`❌ Couldn't DM the owner:`, err.message);
     }
   }
 });
