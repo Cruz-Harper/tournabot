@@ -4,17 +4,20 @@ const { createCanvas } = require('canvas');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
 
 client.on('ready', () => {
-  client.user.setActivity('esports', { type: ActivityType.Competing });
-  console.log(`✅ Status set: Competing in esports`);
-});
+  console.log(`✅ Logged in as ${client.user.tag}`);
 
-client.on('guildCreate', async (guild) => {
-  // Try to find a text channel the bot can send messages in
-  const channel = guild.channels.cache.find(
-    ch =>
-      ch.type === 0 && // text channels only
-      ch.permissionsFor(guild.members.me).has(['ViewChannel', 'SendMessages'])
-  );
+  // Function to update bot status
+  const updateStatus = () => {
+    const serverCount = client.guilds.cache.size;
+    client.user.setActivity(`in ${serverCount} servers`, {
+      type: ActivityType.Watching,
+    });
+    console.log(`🟢 Status updated: in ${serverCount} servers`);
+  };
+
+  updateStatus(); // Set status on start
+  setInterval(updateStatus, 5 * 60 * 1000); // Update every 5 minutes
+});
 
   const welcomeMessage = `🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`;
 
