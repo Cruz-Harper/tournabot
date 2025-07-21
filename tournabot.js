@@ -101,6 +101,16 @@ const userBracketState = new Map();
 const brackets = new Map();
 const checkIns = new Map();
 
+function generateTournamentId() {
+  // Generates "T-" followed by 4 random uppercase letters or numbers... yes, its cool
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+  for (let i = 0; i < 4; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `T-${id}`;
+}
+
 function shuffleArray(array) {
   return array.map(a => [Math.random(), a]).sort((a, b) => a[0] - b[0]).map(a => a[1]);
 }
