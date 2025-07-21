@@ -589,6 +589,15 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("I am a tournament bot created by `@qmqz2`. I am used to smoothly and easily host tournaments for any game without the hassle of doing a million things. I'm in early development, DM qmqz2 for bugs/feedback/feature requests!");
         break;
       }
+      case 'id': {
+  const bracket = brackets.get(interaction.channel.id);
+  if (!bracket) {
+    await interaction.reply({ content: '❌ No active tournament in this channel.', ephemeral: true });
+  } else {
+    await interaction.reply({ content: `🆔 The current tournament ID is **${bracket.id}**.` });
+  }
+  break;
+}
       case 'ping': {
         await interaction.reply("Pong! I'm alive! Ping: " + client.ws.ping)
         break;
@@ -672,6 +681,7 @@ const commands = [
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
   new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket'),
   new SlashCommandBuilder().setName('end').setDescription('End a tournament by ID.').addStringOption(option =>option.setName('tournamentid') .setDescription('The tournament ID (e.g. T-XXXX)') .setRequired(true)),
+  new SlashCommandBuilder().setName('id').setDescription('Display the tournament ID for the current bracket in the channel.')
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN2);
