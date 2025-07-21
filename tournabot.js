@@ -410,9 +410,7 @@ client.on('interactionCreate', async interaction => {
 
     switch (interaction.commandName) {
       case 'create': {
-   const tournamentId = generateTournamentId();
   const bracket = {
-    id: tournamentId,
     players: [],
     matchups: [],
     round: 1,
@@ -444,7 +442,7 @@ client.on('interactionCreate', async interaction => {
   );
   
   await interaction.reply({
-    content: `🏆 Tournament created! The tournament ID is **${tournamentId}**.\nPlease choose a bracket format:`,
+    content: `🏆 Tournament created!.\nPlease choose a bracket format:`,
     components: [row]
   });
 
@@ -588,15 +586,6 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("I am a tournament bot created by `@qmqz2`. I am used to smoothly and easily host tournaments for any game without the hassle of doing a million things. I'm in early development, DM qmqz2 for bugs/feedback/feature requests!");
         break;
       }
-      case 'id': {
-  const bracket = brackets.get(interaction.channel.id);
-  if (!bracket) {
-    await interaction.reply({ content: '❌ No active tournament in this channel.', ephemeral: true });
-  } else {
-    await interaction.reply({ content: `🆔 The current tournament ID is **${bracket.id}**.` });
-  }
-  break;
-}
       case 'ping': {
         await interaction.reply("Pong! I'm alive! Ping: " + client.ws.ping)
         break;
@@ -605,7 +594,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("https://discord.gg/f2rMKaQvP9")
         break;
       }
-      
+     
       case 'stopbracket': {
         const bracket = brackets.get(interaction.channel.id);
         if (!bracket) {
@@ -662,8 +651,18 @@ const commands = [
   new SlashCommandBuilder().setName('ping').setDescription('Ping the bot.'),
   new SlashCommandBuilder().setName('commands').setDescription('Show available commands.'),
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
-  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket'),
-  new SlashCommandBuilder().setName('id').setDescription('Shows the current tournament ID.');
+  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket')
+  new SlashCommandBuilder().setName('settings').setDescription('Manage tournament settings.')
+  .addStringOption(option =>
+    option
+      .setName('format')
+      .setDescription('Bracket format')
+      .setRequired(false)
+      .addChoices(
+        { name: 'Single Elimination', value: 'single_elim' },
+        { name: 'Double Elimination', value: 'double_elim' }
+      )
+  );
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN2);
