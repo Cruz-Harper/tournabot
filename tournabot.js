@@ -410,7 +410,6 @@ client.on('interactionCreate', async interaction => {
 
     switch (interaction.commandName) {
       case 'create': {
-  const tournamentId = generateTournamentId();
 
   const bracket = {
     id: tournamentId,
@@ -443,7 +442,8 @@ client.on('interactionCreate', async interaction => {
       .setLabel('Double Elimination')
       .setStyle(ButtonStyle.Secondary)
   );
-
+  const tournamentId = generateTournamentId();
+  
   await interaction.reply({
     content: `🏆 Tournament created! The tournament ID is **${tournamentId}**.\nPlease choose a bracket format:`,
     components: [row]
