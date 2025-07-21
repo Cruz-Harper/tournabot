@@ -409,11 +409,9 @@ client.on('interactionCreate', async interaction => {
     const isAdmin = interaction.member?.permissions?.has(PermissionsBitField.Flags.Administrator);
 
     switch (interaction.commandName) {
-     case 'create': {
-  // Generate a tournament ID
+      case 'create': {
   const tournamentId = generateTournamentId();
 
-  // Create the bracket object and include the ID
   const bracket = {
     id: tournamentId,
     players: [],
@@ -431,14 +429,29 @@ client.on('interactionCreate', async interaction => {
     winnersBracketWinner: null,
     channelId: interaction.channel.id
   };
-  brackets.set(interaction.channel.id, bracket);
 
-  // Tell the user the tournament ID
+  brackets.set(interaction.channel.id, bracket);
+  userBracketState.set(interaction.user.id, { tournamentId, channelId: interaction.channel.id });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('single_elim')
+      .setLabel('Single Elimination')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('double_elim')
+      .setLabel('Double Elimination')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
   await interaction.reply({
-    content: `🏆 Tournament created! The tournament ID is **${tournamentId}**. Players can now /join.`
+    content: `🏆 Tournament created! The tournament ID is **${tournamentId}**.\nPlease choose a bracket format:`,
+    components: [row]
   });
+
   break;
 }
+
       case 'join': {
         const bracket = brackets.get(interaction.channel.id);
         if (!bracket) return interaction.reply('No active bracket.');
