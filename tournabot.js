@@ -439,7 +439,6 @@ client.on('interactionCreate', async interaction => {
   });
   break;
 }
-      }
       case 'join': {
         const bracket = brackets.get(interaction.channel.id);
         if (!bracket) return interaction.reply('No active bracket.');
