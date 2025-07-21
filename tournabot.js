@@ -409,14 +409,36 @@ client.on('interactionCreate', async interaction => {
     const isAdmin = interaction.member?.permissions?.has(PermissionsBitField.Flags.Administrator);
 
     switch (interaction.commandName) {
-      case 'create': {
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('single_elim').setLabel('Single Elimination').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('double_elim').setLabel('Double Elimination').setStyle(ButtonStyle.Secondary)
-        );
-        userBracketState.set(interaction.user.id, { step: 1, channelId: interaction.channel.id });
-        await interaction.reply({ content: 'Choose elimination format:', components: [row] });
-        break;
+     case 'create': {
+  // Generate a tournament ID
+  const tournamentId = generateTournamentId();
+
+  // Create the bracket object and include the ID
+  const bracket = {
+    id: tournamentId,
+    players: [],
+    matchups: [],
+    round: 1,
+    currentMatchIndex: 0,
+    format: null,
+    results: [],
+    losersBracket: [],
+    losersMatchups: [],
+    losersCurrentMatchIndex: 0,
+    losersRound: 0,
+    grandFinalsMatch: null,
+    finalStage: false,
+    winnersBracketWinner: null,
+    channelId: interaction.channel.id
+  };
+  brackets.set(interaction.channel.id, bracket);
+
+  // Tell the user the tournament ID
+  await interaction.reply({
+    content: `🏆 Tournament created! The tournament ID is **${tournamentId}**. Players can now /join.`
+  });
+  break;
+}
       }
       case 'join': {
         const bracket = brackets.get(interaction.channel.id);
