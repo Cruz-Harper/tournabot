@@ -653,17 +653,17 @@ const commands = [
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
   new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket'),
   new SlashCommandBuilder().setName('settings').setDescription('Manage tournament settings.')
-  .addStringOption(option =>
-    option
-      .setName('format')
-      .setDescription('Bracket format')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Single Elimination', value: 'single_elim' },
-        { name: 'Double Elimination', value: 'double_elim' }
-      )
-  );
-];
+    .addStringOption(option =>
+      option
+        .setName('format')
+        .setDescription('Bracket format')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Single Elimination', value: 'single_elim' },
+          { name: 'Double Elimination', value: 'double_elim' }
+        )
+    )
+]; 
 
 const rest = new REST({ version: '10' }).setToken(TOKEN2);
 (async () => {
