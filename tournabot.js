@@ -409,7 +409,7 @@ client.on('interactionCreate', async interaction => {
     const isAdmin = interaction.member?.permissions?.has(PermissionsBitField.Flags.Administrator);
 
     switch (interaction.commandName) {
-      case 'startbracket': {
+      case 'create': {
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('single_elim').setLabel('Single Elimination').setStyle(ButtonStyle.Primary),
           new ButtonBuilder().setCustomId('double_elim').setLabel('Double Elimination').setStyle(ButtonStyle.Secondary)
@@ -605,7 +605,7 @@ client.on('interactionCreate', async interaction => {
 
 // ========== COMMAND REGISTRATION ==========
 const commands = [
-  new SlashCommandBuilder().setName('startbracket').setDescription('Start a new tournament bracket.'),
+  new SlashCommandBuilder().setName('create').setDescription('create a new tournament.'),
   new SlashCommandBuilder().setName('join').setDescription('Join the current tournament.'),
   new SlashCommandBuilder().setName('leave').setDescription('Leave the current tournament.'),
   new SlashCommandBuilder().setName('start').setDescription('Begin the tournament.'),
