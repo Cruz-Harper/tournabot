@@ -470,7 +470,7 @@ client.on('interactionCreate', async interaction => {
   };
 
   brackets.set(interaction.channel.id, bracket);
-  userBracketState.set(interaction.user.id, { tournamentId, channelId: interaction.channel.id });
+  userBracketState.set(interaction.user.id, { channelId: interaction.channel.id });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
