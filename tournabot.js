@@ -651,7 +651,7 @@ const commands = [
   new SlashCommandBuilder().setName('ping').setDescription('Ping the bot.'),
   new SlashCommandBuilder().setName('commands').setDescription('Show available commands.'),
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
-  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket')
+  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket'),
   new SlashCommandBuilder().setName('settings').setDescription('Manage tournament settings.')
   .addStringOption(option =>
     option
