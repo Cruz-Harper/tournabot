@@ -663,6 +663,7 @@ const commands = [
   new SlashCommandBuilder().setName('commands').setDescription('Show available commands.'),
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
   new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket')
+  new SlashCommandBuilder().setName('id').setDescription('Shows the current tournament ID.');
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN2);
