@@ -396,39 +396,53 @@ client.on('interactionCreate', async interaction => {
         grandFinalsMatch: null,
         finalStage: false,
         winnersBracketWinner: null,
-        channelId: interaction.channel.id
+        channelId: interaction.channel.id,
+        active: true,
+        name: 'Tournament',
+        maxPlayers: null
       };
       brackets.set(interaction.channel.id, bracket);
       await interaction.update({ content: 'Bracket created! Players can now /join.', components: [] });
       return;
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'settings_format') {
-    const tournament = tournaments[interaction.guild.id];
-    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-    const isCreator = interaction.user.id === tournament.creatorId;
-    if (!isAdmin && !isCreator) {
-      await interaction.reply({ content: 'You are not authorized to change the format.', ephemeral: true });
+    // Handle "Stop Tournament" button
+    if (customId === 'settings_stop') {
+      const bracket = brackets.get(interaction.channel.id);
+      if (!bracket) {
+        await interaction.reply({ content: 'No active tournament found.', ephemeral: true });
+        return;
+      }
+      const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+      const isCreator = interaction.user.id === bracket.creatorId;
+      if (!isAdmin && !isCreator) {
+        await interaction.reply({ content: 'You are not authorized to stop the tournament.', ephemeral: true });
+        return;
+      }
+      bracket.active = false;
+      await interaction.update({ content: 'Tournament has been stopped.', components: [] });
       return;
     }
-    tournament.format = interaction.values[0];
-    await interaction.update({ content: `Tournament format changed to **${tournament.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination'}**.`, components: [] });
   }
 
-  // Stop tournament button handler
-  if (interaction.isButton() && interaction.customId === 'settings_stop') {
-    const tournament = tournaments[interaction.guild.id];
-    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-    const isCreator = interaction.user.id === tournament.creatorId;
-    if (!isAdmin && !isCreator) {
-      await interaction.reply({ content: 'You are not authorized to stop the tournament.', ephemeral: true });
+  // Handle Select Menu Interactions (e.g., format change)
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId === 'settings_format') {
+      const bracket = brackets.get(interaction.channel.id);
+      if (!bracket) {
+        await interaction.reply({ content: 'No active tournament found.', ephemeral: true });
+        return;
+      }
+      const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+      const isCreator = interaction.user.id === bracket.creatorId;
+      if (!isAdmin && !isCreator) {
+        await interaction.reply({ content: 'You are not authorized to change the format.', ephemeral: true });
+        return;
+      }
+      bracket.format = interaction.values[0];
+      await interaction.update({ content: `Tournament format changed to **${bracket.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination'}**.`, components: [] });
       return;
     }
-    tournament.active = false;
-    await interaction.update({ content: 'Tournament has been stopped.', components: [] });
-  }
-});
-    
   }
 
   // Handle Slash Commands
