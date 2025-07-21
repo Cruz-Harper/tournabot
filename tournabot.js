@@ -410,7 +410,7 @@ client.on('interactionCreate', async interaction => {
 
     switch (interaction.commandName) {
       case 'create': {
-
+   const tournamentId = generateTournamentId();
   const bracket = {
     id: tournamentId,
     players: [],
@@ -442,7 +442,6 @@ client.on('interactionCreate', async interaction => {
       .setLabel('Double Elimination')
       .setStyle(ButtonStyle.Secondary)
   );
-  const tournamentId = generateTournamentId();
   
   await interaction.reply({
     content: `🏆 Tournament created! The tournament ID is **${tournamentId}**.\nPlease choose a bracket format:`,
@@ -606,23 +605,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("https://discord.gg/f2rMKaQvP9")
         break;
       }
-      case 'end': {
-  const tournamentId = interaction.options.getString('tournamentid');
-  // Find the bracket with that ID
-  let found = false;
-  for (const [channelId, bracket] of brackets.entries()) {
-    if (bracket.id === tournamentId) {
-      brackets.delete(channelId);
-      found = true;
-      await interaction.reply(`✅ Tournament ${tournamentId} has been ended and data cleared.`);
-      break;
-    }
-  }
-  if (!found) {
-    await interaction.reply({ content: `❌ Tournament ${tournamentId} not found.`, ephemeral: true });
-  }
-  break;
-}
+      
       case 'stopbracket': {
         const bracket = brackets.get(interaction.channel.id);
         if (!bracket) {
@@ -679,9 +662,7 @@ const commands = [
   new SlashCommandBuilder().setName('ping').setDescription('Ping the bot.'),
   new SlashCommandBuilder().setName('commands').setDescription('Show available commands.'),
   new SlashCommandBuilder().setName('support').setDescription('A link to our support server.'),
-  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket'),
-  new SlashCommandBuilder().setName('end').setDescription('End a tournament by ID.').addStringOption(option =>option.setName('tournamentid') .setDescription('The tournament ID (e.g. T-XXXX)') .setRequired(true)),
-  new SlashCommandBuilder().setName('id').setDescription('Display the tournament ID for the current bracket in the channel.')
+  new SlashCommandBuilder().setName('stopbracket').setDescription('Stops and deletes the current bracket')
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN2);
