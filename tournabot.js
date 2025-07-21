@@ -382,6 +382,7 @@ client.on('interactionCreate', async interaction => {
       const state = userBracketState.get(userId);
       if (!state || state.channelId !== interaction.channel.id) return;
       const bracket = {
+        creatorId: interaction.user.id,
         players: [],
         matchups: [],
         round: 1,
@@ -401,6 +402,33 @@ client.on('interactionCreate', async interaction => {
       await interaction.update({ content: 'Bracket created! Players can now /join.', components: [] });
       return;
     }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'settings_format') {
+    const tournament = tournaments[interaction.guild.id];
+    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+    const isCreator = interaction.user.id === tournament.creatorId;
+    if (!isAdmin && !isCreator) {
+      await interaction.reply({ content: 'You are not authorized to change the format.', ephemeral: true });
+      return;
+    }
+    tournament.format = interaction.values[0];
+    await interaction.update({ content: `Tournament format changed to **${tournament.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination'}**.`, components: [] });
+  }
+
+  // Stop tournament button handler
+  if (interaction.isButton() && interaction.customId === 'settings_stop') {
+    const tournament = tournaments[interaction.guild.id];
+    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+    const isCreator = interaction.user.id === tournament.creatorId;
+    if (!isAdmin && !isCreator) {
+      await interaction.reply({ content: 'You are not authorized to stop the tournament.', ephemeral: true });
+      return;
+    }
+    tournament.active = false;
+    await interaction.update({ content: 'Tournament has been stopped.', components: [] });
+  }
+});
+    
   }
 
   // Handle Slash Commands
@@ -586,6 +614,73 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("I am a tournament bot created by `@qmqz2`. I am used to smoothly and easily host tournaments for any game without the hassle of doing a million things. I'm in early development, DM qmqz2 for bugs/feedback/feature requests!");
         break;
       }
+      case 'settings': {
+  // Fetch tournament info from your data store (replace this with your actual logic)
+  const tournament = tournaments[interaction.guild.id];
+  if (!tournament) {
+    await interaction.reply({ content: 'No active tournament found.', ephemeral: true });
+    return;
+  }
+
+  // Check permissions
+  const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+  const isCreator = interaction.user.id === tournament.creatorId;
+  if (!isAdmin && !isCreator) {
+    await interaction.reply({ content: 'Only the tournament creator or server admins can use this command.', ephemeral: true });
+    return;
+  }
+
+  // Build embed
+  const embed = new EmbedBuilder()
+    .setTitle('Tournament Settings')
+    .setColor(0x5865F2)
+    .addFields(
+      { name: 'Tournament Name', value: tournament.name || 'Unnamed', inline: true },
+      { name: 'Format', value: tournament.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination', inline: true },
+      { name: 'Status', value: tournament.active ? 'Active' : 'Stopped', inline: true },
+      { name: 'Max Players', value: tournament.maxPlayers ? `${tournament.maxPlayers}` : 'Unlimited', inline: true },
+      { name: 'Created by', value: `<@${tournament.creatorId}>`, inline: true }
+    )
+    .setFooter({ text: 'Change settings below. Only visible to authorized users.' });
+
+  // Format select menu
+  const formatSelect = new StringSelectMenuBuilder()
+    .setCustomId('settings_format')
+    .setPlaceholder('Choose bracket format')
+    .addOptions([
+      {
+        label: 'Single Elimination',
+        value: 'single_elim',
+        description: 'Players are eliminated after one loss.',
+        emoji: '🥇'
+      },
+      {
+        label: 'Double Elimination',
+        value: 'double_elim',
+        description: 'Players are eliminated after two losses.',
+        emoji: '🥈'
+      }
+    ])
+    .setDefaultValue(tournament.format);
+
+  // Stop button
+  const stopButton = new ButtonBuilder()
+    .setCustomId('settings_stop')
+    .setLabel('Stop Tournament')
+    .setStyle(ButtonStyle.Danger)
+    .setEmoji('🛑');
+
+  const row1 = new ActionRowBuilder().addComponents(formatSelect);
+  const row2 = new ActionRowBuilder().addComponents(stopButton);
+
+  await interaction.reply({
+    embeds: [embed],
+    components: [row1, row2],
+    ephemeral: true
+  });
+  
+  break;
+}
       case 'ping': {
         await interaction.reply("Pong! I'm alive! Ping: " + client.ws.ping)
         break;
