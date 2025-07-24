@@ -629,31 +629,29 @@ client.on('interactionCreate', async interaction => {
         break;
       }
       case 'settings': {
-  // Fetch tournament info from your data store (replace this with your actual logic)
-  const tournament = tournaments[interaction.guild.id];
-  if (!tournament) {
-    await interaction.reply({ content: 'No active tournament found.', ephemeral: true });
+  const bracket = brackets.get(interaction.channel.id);
+  if (!bracket) {
+    await interaction.reply({ content: 'No active tournament found in this channel.', ephemeral: true });
     return;
   }
 
-  // Check permissions
   const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-  const isCreator = interaction.user.id === tournament.creatorId;
+  const isCreator = interaction.user.id === bracket.creatorId;
   if (!isAdmin && !isCreator) {
     await interaction.reply({ content: 'Only the tournament creator or server admins can use this command.', ephemeral: true });
     return;
   }
 
-  // Build embed
+  // Build the embed with current tournament settings
   const embed = new EmbedBuilder()
     .setTitle('Tournament Settings')
     .setColor(0x5865F2)
     .addFields(
-      { name: 'Tournament Name', value: tournament.name || 'Unnamed', inline: true },
-      { name: 'Format', value: tournament.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination', inline: true },
-      { name: 'Status', value: tournament.active ? 'Active' : 'Stopped', inline: true },
-      { name: 'Max Players', value: tournament.maxPlayers ? `${tournament.maxPlayers}` : 'Unlimited', inline: true },
-      { name: 'Created by', value: `<@${tournament.creatorId}>`, inline: true }
+      { name: 'Tournament Name', value: bracket.name || 'Unnamed', inline: true },
+      { name: 'Format', value: bracket.format === 'double_elim' ? 'Double Elimination' : 'Single Elimination', inline: true },
+      { name: 'Status', value: bracket.active ? 'Active' : 'Stopped', inline: true },
+      { name: 'Max Players', value: bracket.maxPlayers ? `${bracket.maxPlayers}` : 'Unlimited', inline: true },
+      { name: 'Created by', value: `<@${bracket.creatorId}>`, inline: true }
     )
     .setFooter({ text: 'Change settings below. Only visible to authorized users.' });
 
@@ -675,7 +673,8 @@ client.on('interactionCreate', async interaction => {
         emoji: '🥈'
       }
     ])
-    .setDefaultValue(tournament.format);
+    .setMinValues(1)
+    .setMaxValues(1);
 
   // Stop button
   const stopButton = new ButtonBuilder()
@@ -692,7 +691,7 @@ client.on('interactionCreate', async interaction => {
     components: [row1, row2],
     ephemeral: true
   });
-  
+
   break;
 }
       case 'ping': {
