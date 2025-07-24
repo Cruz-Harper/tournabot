@@ -10,6 +10,7 @@ const {
   REST,
   Routes,
   ActivityType,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 const { createCanvas } = require('canvas');
 
