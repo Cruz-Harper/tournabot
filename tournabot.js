@@ -807,7 +807,7 @@ client.on('interactionCreate', async interaction => {
 
 // ========== COMMAND REGISTRATION ==========
 const commands = [
-new SlashCommandBuilder(.setName('name') .setDescription('Rename your tournament') .addStringOption(option =>option.setName('name').setDescription('New tournament name') .setRequired(true) ),
+new SlashCommandBuilder().setName('name') .setDescription('Rename your tournament') .addStringOption(option =>option.setName('name').setDescription('New tournament name') .setRequired(true) ),
 new SlashCommandBuilder() .setName('checkin').setDescription('Check-in utilities').addSubcommand(sub =>sub.setName('force').setDescription('Force check-in a user') .addUserOption(opt =>opt.setName('user') .setDescription('User to force check-in').setRequired(true) )).addSubcommand(sub =>sub.setName('list').setDescription('List users who are checked in') ),
   new SlashCommandBuilder().setName('create').setDescription('create a new tournament.'),
   new SlashCommandBuilder().setName('join').setDescription('Join the current tournament.'),
