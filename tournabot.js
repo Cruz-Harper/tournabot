@@ -514,7 +514,9 @@ client.on('interactionCreate', async interaction => {
       }
       case 'start': {
         const bracket = brackets.get(interaction.channel.id);
-        if (!bracket || bracket.players.length < 2) return interaction.reply('Not enough players to start.');
+        if (!bracket || bracket.players.length < 3) {
+  return interaction.reply('❌ You need at least **3 players** to start a tournament.');
+}
         bracket.started = true;
         bracket.players = shuffleArray(bracket.players);
         bracket.matchups = generateMatchups(bracket.players);
@@ -577,6 +579,10 @@ client.on('interactionCreate', async interaction => {
         const checkinState = checkIns.get(matchKey);
         if (!checkinState || !checkinState.p1 || !checkinState.p2) {
           return interaction.reply({ content: '❌ Both players must check in before the match can be logged.', ephemeral: true });
+        }
+        if (isAdmin) {
+  resolveMatch(winnerPlayer, match, interaction.channel, bracket, losersBracket, grandFinals);
+  return await interaction.reply(`🛡️ Admin override: **${winner.username}** wins over **${loser.username}**.`);
         }
 
         // Send confirmation buttons
@@ -699,11 +705,66 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply("Pong! I'm alive! Ping: " + client.ws.ping)
         break;
       }
+      case 'checkin': {
+  const sub = interaction.options.getSubcommand();
+  const bracket = brackets.get(interaction.channel.id);
+  if (!bracket) {
+    return interaction.reply({ content: '❌ No active tournament.', ephemeral: true });
+  }
+
+  if (sub === 'force') {
+    const user = interaction.options.getUser('user');
+    let found = false;
+    for (const [key, data] of checkIns.entries()) {
+      if (data.match.some(p => p.id === user.id)) {
+        if (data.match[0].id === user.id) data.p1 = true;
+        if (data.match[1].id === user.id) data.p2 = true;
+        checkIns.set(key, data);
+        found = true;
+        await interaction.reply(`✅ Forced check-in for **${user.username}**.`);
+        break;
+      }
+    }
+    if (!found) {
+      await interaction.reply({ content: `❌ No current match found for **${user.username}**.`, ephemeral: true });
+    }
+  }
+
+  if (sub === 'list') {
+    if (checkIns.size === 0) {
+      return interaction.reply({ content: 'ℹ️ No check-in sessions active.', ephemeral: true });
+    }
+
+    let output = '';
+    for (const [key, data] of checkIns.entries()) {
+      const p1 = data.match[0];
+      const p2 = data.match[1];
+      output += `Match: ${p1.username} vs ${p2.username}\n→ ${data.p1 ? '✅' : '❌'} ${p1.username}, ${data.p2 ? '✅' : '❌'} ${p2.username}\n\n`;
+    }
+
+    await interaction.reply({ content: output, ephemeral: true });
+  }
+
+  break;
+}
+
       case 'support': {
         await interaction.reply("https://discord.gg/f2rMKaQvP9")
         break;
       }
-     
+      case 'name': {
+  const bracket = brackets.get(interaction.channel.id);
+  if (!bracket) {
+    return interaction.reply({ content: '❌ No active tournament to rename.', ephemeral: true });
+  }
+
+  const newName = interaction.options.getString('name');
+  bracket.name = newName;
+
+  await interaction.reply(`🏷️ Tournament renamed to **${newName}**.`);
+  break;
+}
+
       case 'stopbracket': {
         const bracket = brackets.get(interaction.channel.id);
         if (!bracket) {
@@ -746,6 +807,8 @@ client.on('interactionCreate', async interaction => {
 
 // ========== COMMAND REGISTRATION ==========
 const commands = [
+new SlashCommandBuilder(.setName('name') .setDescription('Rename your tournament') .addStringOption(option =>option.setName('name').setDescription('New tournament name') .setRequired(true) ),
+new SlashCommandBuilder() .setName('checkin').setDescription('Check-in utilities').addSubcommand(sub =>sub.setName('force').setDescription('Force check-in a user') .addUserOption(opt =>opt.setName('user') .setDescription('User to force check-in').setRequired(true) )).addSubcommand(sub =>sub.setName('list').setDescription('List users who are checked in') ),
   new SlashCommandBuilder().setName('create').setDescription('create a new tournament.'),
   new SlashCommandBuilder().setName('join').setDescription('Join the current tournament.'),
   new SlashCommandBuilder().setName('leave').setDescription('Leave the current tournament.'),
