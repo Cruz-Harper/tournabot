@@ -33,7 +33,7 @@ client.on('ready', () => {
       type: ActivityType.Watching,
     }),
     () => ({
-      name: '/startbracket to begin',
+      name: '/create to begin',
       type: ActivityType.Playing,
     }),
   ];
@@ -59,7 +59,7 @@ client.on('guildCreate', async (guild) => {
         .has(['ViewChannel', 'SendMessages'])
   );
 
-  const welcomeMessage = `🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/startbracket\` to run your first tournament!`;
+  const welcomeMessage = `🎉 Yo, thanks for adding me to **${guild.name}**!\nType \`/create\` to run your first tournament!`;
 
   if (channel) {
     try {
