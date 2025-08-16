@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const ui = require('./ui.js'); // make sure this exists
 
 const client = new Client({
   intents: [
@@ -12,7 +13,7 @@ const client = new Client({
 
 const prefix = ',';
 const K = 32; // Fixed K-factor
-const lastWinTime = {}; // cooldown storage
+const lastWinTime = {};
 const CREATOR_ID = "1364776113922117695"; // Creator's Discord ID
 
 // -------------------- ELO Functions --------------------
@@ -23,10 +24,8 @@ function expectedScore(ratingA, ratingB) {
 function calculateElo(winnerRating, loserRating) {
   const expectedWin = expectedScore(winnerRating, loserRating);
   const expectedLose = expectedScore(loserRating, winnerRating);
-
   const newWinner = winnerRating + K * (1 - expectedWin);
   const newLoser = loserRating + K * (0 - expectedLose);
-
   return [Math.round(newWinner), Math.round(newLoser)];
 }
 
@@ -34,7 +33,6 @@ function calculateElo(winnerRating, loserRating) {
 function parsePointsFromEmbed(embed) {
   const points = {};
   if (!embed || !embed.description) return points;
-
   const lines = embed.description.split('\n');
   for (const line of lines) {
     const match = line.match(/^\d+\.\s\*\*(.+?)\*\*\s—\s(\d+)\spts$/);
@@ -56,9 +54,7 @@ function buildPointsEmbed(points, guild, title = '📊 Points Leaderboard') {
     })
     .filter(Boolean)
     .sort((a, b) => b.pts - a.pts);
-
   const description = entries.map((entry, i) => `${i + 1}. **${entry.name}** — ${entry.pts} pts`).join('\n');
-
   return new EmbedBuilder()
     .setTitle(title)
     .setColor(0x00aeff)
@@ -100,32 +96,40 @@ async function saveConfig(guild, config) {
   if (messages) for (const msg of messages.values()) await msg.delete().catch(() => {});
 
   const line = `${config.pointsChannelId},${config.pointsMessageId}`;
-  await configChannel.send(line);
+  await configChannel.send(line).catch(() => {});
 }
 
 // -------------------- Fetch/Update Leaderboard --------------------
 async function fetchPoints(config, guild) {
   if (!config.pointsChannelId || !config.pointsMessageId) return {};
-
   const channel = guild.channels.cache.get(config.pointsChannelId);
   if (!channel?.isTextBased()) return {};
-
   const msg = await channel.messages.fetch(config.pointsMessageId).catch(() => null);
   if (!msg || msg.embeds.length === 0) return {};
-
   return parsePointsFromEmbed(msg.embeds[0]);
 }
 
 async function updateLeaderboard(guild, points, config) {
   const channel = guild.channels.cache.get(config.pointsChannelId);
   if (!channel?.isTextBased()) return;
-
   const msg = await channel.messages.fetch(config.pointsMessageId).catch(() => null);
   if (!msg) return;
-
   const embed = buildPointsEmbed(points, guild);
-  await msg.edit({ content: `📊 Current ELO Ratings:`, embeds: [embed] });
+  await msg.edit({ content: `📊 Current ELO Ratings:`, embeds: [embed] }).catch(() => {});
   await saveConfig(guild, config);
+}
+
+// -------------------- Ensure #history --------------------
+async function ensureHistoryChannel(guild) {
+  let historyChannel = guild.channels.cache.find(c => c.name === 'history' && c.isTextBased());
+  if (!historyChannel) {
+    historyChannel = await guild.channels.create({
+      name: 'history',
+      type: 0,
+      permissionOverwrites: [{ id: guild.roles.everyone.id, allow: ['ViewChannel'] }]
+    }).catch(() => null);
+  }
+  return historyChannel;
 }
 
 // -------------------- Ready --------------------
@@ -137,69 +141,42 @@ client.once('ready', async () => {
     const config = await fetchConfig(guild);
     const points = await fetchPoints(config, guild);
     await updateLeaderboard(guild, points, config);
+    await ensureHistoryChannel(guild);
   }
 });
 
 // -------------------- Commands --------------------
 client.on('messageCreate', async message => {
   if (!message.guild || message.author.bot || !message.content.startsWith(prefix)) return;
-
   const [cmd, ...args] = message.content.slice(prefix.length).trim().split(/\s+/);
   const mention = message.mentions.members.first();
   const guild = message.guild;
-
   const config = await fetchConfig(guild);
   const points = await fetchPoints(config, guild);
+  const historyChannel = await ensureHistoryChannel(guild);
 
   switch (cmd.toLowerCase()) {
+
     case 'setchannel': {
       if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only.');
       const chan = message.mentions.channels.first();
       if (!chan?.isTextBased()) return message.reply('❌ Mention a valid text channel.');
       const embed = buildPointsEmbed(points, guild);
-      const msg = await chan.send({ content: `📊 Current ELO Ratings:`, embeds: [embed] });
+      const msg = await chan.send({ content: `📊 Current ELO Ratings:`, embeds: [embed] }).catch(() => {});
       config.pointsChannelId = chan.id;
-      config.pointsMessageId = msg.id;
+      config.pointsMessageId = msg?.id || null;
       await saveConfig(guild, config);
       return message.reply('✅ Points channel set.');
     }
 
-   case 'win': {
-  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only.');
-  if (!mention || !args[1]) return message.reply('❌ Use `,win @winner @loser` format.');
-
-  const winnerMember = mention;
-  const loserMember = message.guild.members.cache.get(args[1].replace(/\D/g, ''));
-  if (!loserMember) return message.reply('❌ Invalid loser.');
-
-  const winner = winnerMember.displayName;
-  const loser = loserMember.displayName;
-
-  if (winner === loser) return message.reply('❌ Winner and loser cannot be the same person.');
-
-  const key = `${guild.id}-${winnerMember.id}`;
-  const now = Date.now();
-  const cooldown = 10 * 60 * 1000; // 10 minutes
-
-  // Only enforce cooldown if NOT creator
-  if (message.author.id !== CREATOR_ID) {
-    if (lastWinTime[key] && now - lastWinTime[key] < cooldown) {
-      return message.reply(`❌ ${winner} must wait ${Math.ceil((cooldown - (now - lastWinTime[key])) / 60000)} minutes before recording another win.`);
+    case 'startmatch': {
+      if (!mention) return message.reply("❌ Mention your opponent. Example: `,startmatch @opponent`");
+      if (mention.id === message.member.id) return message.reply("❌ You cannot play against yourself.");
+      const player1 = message.member;
+      const player2 = mention;
+      await ui.startMatch(client, message.channel, player1, player2, points, config, historyChannel);
+      break;
     }
-    lastWinTime[key] = now;
-  }
-
-  const winnerRating = points[winner] || 1200;
-  const loserRating = points[loser] || 1200;
-
-  const [newWinner, newLoser] = calculateElo(winnerRating, loserRating);
-  points[winner] = newWinner;
-  points[loser] = newLoser;
-
-  await updateLeaderboard(guild, points, config);
-  return message.reply(`✅ Updated ELO: **${winner}**: ${newWinner}, **${loser}**: ${newLoser}`);
-}
-
 
     case 'getpoints': {
       const target = mention || message.member;
@@ -225,27 +202,15 @@ client.on('messageCreate', async message => {
       return message.reply({ embeds: [embed] });
     }
 
-    // Hidden creator-only command
-    case 'masterreset': {
-      if (message.author.id !== CREATOR_ID) return;
-      for (const g of client.guilds.cache.values()) {
-        const cfg = await fetchConfig(g);
-        const emptyPoints = {};
-        await updateLeaderboard(g, emptyPoints, cfg);
-      }
-      for (const key in lastWinTime) delete lastWinTime[key];
-      return message.reply("✅ Master reset complete — all servers cleared.");
-    }
+    case 'history': {
+      const target = mention || message.member;
+      if (!target) return message.reply('❌ Invalid user.');
+      const messages = await historyChannel.messages.fetch({ limit: 100 }).catch(() => null);
+      if (!messages || messages.size === 0) return message.reply('⚠️ No match history found.');
 
-    // Admin-only server reset
-    case 'serverreset': {
-      if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only.');
-      const emptyPoints = {};
-      await updateLeaderboard(guild, emptyPoints, config);
-      for (const key in lastWinTime) {
-        if (key.startsWith(`${guild.id}-`)) delete lastWinTime[key];
-      }
-      return message.reply(`✅ Server reset complete — leaderboard and cooldowns cleared for **${guild.name}**.`);
+      const userEmbeds = messages.filter(msg => msg.embeds.length && msg.embeds[0].description?.includes(target.displayName));
+      if (userEmbeds.size === 0) return message.reply('⚠️ No match history found for this user.');
+      return message.reply({ embeds: userEmbeds.map(msg => msg.embeds[0]) });
     }
 
     case 'ping': return message.reply(`🏓 Pong! ${client.ws.ping}ms`);
@@ -253,15 +218,15 @@ client.on('messageCreate', async message => {
     case 'help': {
       return message.reply({
         embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
-\`,win @winner @loser\` — Update ELO
 \`,setchannel #channel\` — Set leaderboard channel
+\`,startmatch @opponent\` — Start a match with UI
 \`,getpoints [@user]\` — Show user's ELO
+\`,history [@user]\` — Show match history of a user
 \`,top\` — Show server leaderboard
 \`,worldtop\` — Show global leaderboard
-\`,serverreset\` — Reset leaderboard for this server (Admins only)
 \`,ping\` — Bot ping
 \`,help\` — This help message
-        `)],
+      `)],
       });
     }
 
@@ -270,3 +235,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN5);
+
