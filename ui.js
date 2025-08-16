@@ -5,7 +5,8 @@ const {
   ButtonStyle, 
   StringSelectMenuBuilder, 
   ComponentType, 
-  EmbedBuilder 
+  EmbedBuilder, 
+  PermissionsBitField 
 } = require("discord.js");
 
 const fighters = fs.readFileSync("fighters.txt", "utf-8").split("\n").filter(Boolean);
@@ -15,6 +16,16 @@ const counterpickStages = ["Pokémon Stadium 2", "Smashville", "Kalos Pokémon L
 module.exports = {
   async startMatch(client, channel, player1, player2, points, config) {
     if (!channel || !player1 || !player2) throw new Error("Missing players or channel.");
+
+    // Ensure history exists
+    let historyChannel = channel.guild.channels.cache.find(c => c.name === "history" && c.isTextBased());
+    if (!historyChannel) {
+      historyChannel = await channel.guild.channels.create({
+        name: "history",
+        type: 0,
+        permissionOverwrites: [{ id: channel.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.SendMessages] }],
+      });
+    }
 
     const matchEmbed = new EmbedBuilder()
       .setTitle("🎮 Match Setup")
@@ -28,21 +39,22 @@ module.exports = {
     );
 
     const msg = await channel.send({ embeds: [matchEmbed], components: [checkinRow] });
-
     const checkedIn = new Set();
+
     const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 10 * 60 * 1000 });
 
     collector.on("collect", async i => {
-      if (i.user.id !== player1.id && i.user.id !== player2.id) return i.reply({ content: "❌ Not part of this match.", ephemeral: true });
+      if (i.user.id !== player1.id && i.user.id !== player2.id)
+        return i.reply({ content: "❌ Not part of this match.", ephemeral: true });
+
       if (checkedIn.has(i.user.id)) return i.reply({ content: "✅ Already checked in.", ephemeral: true });
 
       checkedIn.add(i.user.id);
       await i.update({ content: `${i.user.username} has checked in!`, embeds: [matchEmbed], components: [checkinRow] });
 
-      // Once both checked in
       if (checkedIn.size === 2) {
         collector.stop("checkedIn");
-        await characterSelection(client, channel, player1, player2, points, config);
+        await characterSelection(client, channel, player1, player2, points, config, historyChannel);
       }
     });
 
@@ -52,33 +64,46 @@ module.exports = {
   }
 };
 
-async function characterSelection(client, channel, player1, player2, points, config) {
-  const createMenu = user => new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId(`char_${user.id}`)
-      .setPlaceholder("Select your character")
-      .addOptions(fighters.map(f => ({ label: f, value: f })))
-  );
+// -------------------- Character Selection --------------------
+async function characterSelection(client, channel, player1, player2, points, config, historyChannel) {
+  const paginateFighters = (fighters) => {
+    const pages = [];
+    for (let i = 0; i < fighters.length; i += 25) pages.push(fighters.slice(i, i + 25));
+    return pages;
+  };
+
+  const selectedChars = {};
+  const pages = paginateFighters(fighters);
 
   const embed = new EmbedBuilder().setTitle("🎮 Character Selection").setDescription("Pick your character!").setColor(0x00ff99);
 
-  const msg1 = await channel.send({ content: `${player1}`, embeds: [embed], components: [createMenu(player1)] });
-  const msg2 = await channel.send({ content: `${player2}`, embeds: [embed], components: [createMenu(player2)] });
+  for (const player of [player1, player2]) {
+    const menuRow = new ActionRowBuilder();
+    pages.forEach((page, idx) => {
+      menuRow.addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`char_${player.id}_${idx}`)
+          .setPlaceholder("Select your character")
+          .addOptions(page.map(f => ({ label: f, value: f })))
+      );
+    });
+    await channel.send({ content: player.toString(), embeds: [embed], components: [menuRow] });
+  }
 
-  const selectedChars = {};
   const collector = channel.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 10 * 60 * 1000 });
 
   collector.on("collect", async i => {
-    if (i.user.id !== player1.id && i.user.id !== player2.id) return i.reply({ content: "❌ Not part of this match.", ephemeral: true });
+    if (i.user.id !== player1.id && i.user.id !== player2.id)
+      return i.reply({ content: "❌ Not part of this match.", ephemeral: true });
+
     if (selectedChars[i.user.id]) return i.reply({ content: "✅ Already selected.", ephemeral: true });
 
     selectedChars[i.user.id] = i.values[0];
     await i.update({ content: `You selected **${i.values[0]}**`, components: [] });
 
-    // When both have chosen
     if (Object.keys(selectedChars).length === 2) {
       collector.stop("charsSelected");
-      await stageBan(client, channel, player1, player2, selectedChars, points, config);
+      await stageBan(client, channel, player1, player2, selectedChars, points, config, historyChannel);
     }
   });
 
@@ -87,11 +112,11 @@ async function characterSelection(client, channel, player1, player2, points, con
   });
 }
 
-async function stageBan(client, channel, player1, player2, selectedChars, points, config) {
+// -------------------- Stage Ban --------------------
+async function stageBan(client, channel, player1, player2, selectedChars, points, config, historyChannel) {
   const bannedStages = [];
   const stages = [...starterStages, ...counterpickStages];
 
-  // Simplified 1-2-1 banning flow
   for (let i = 0; i < 4; i++) {
     const currentPlayer = i % 2 === 0 ? player1 : player2;
     const embed = new EmbedBuilder().setTitle("🚫 Stage Ban").setDescription(`Select a stage to ban (${currentPlayer.username})`).setColor(0xff9900);
@@ -113,14 +138,14 @@ async function stageBan(client, channel, player1, player2, selectedChars, points
   }
 
   const availableStages = stages.filter(s => !bannedStages.includes(s));
-  const stageChosen = availableStages[0]; // pick first remaining as starter
+  const stageChosen = availableStages[0];
   await channel.send(`✅ Starter stage selected: **${stageChosen}**`);
 
-  await logMatch(client, channel, player1, player2, selectedChars, stageChosen, points, config);
+  await logMatch(client, channel, player1, player2, selectedChars, stageChosen, points, config, historyChannel);
 }
 
-async function logMatch(client, channel, player1, player2, characters, stage, points, config) {
-  // Ask winner
+// -------------------- Log Match --------------------
+async function logMatch(client, channel, player1, player2, characters, stage, points, config, historyChannel) {
   const embed = new EmbedBuilder().setTitle("🏆 Report Match").setDescription("Select the winner").setColor(0x00ff99);
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`winner_${player1.id}`).setLabel(player1.username).setStyle(ButtonStyle.Success),
@@ -142,17 +167,13 @@ async function logMatch(client, channel, player1, player2, characters, stage, po
 
     await i.update({ content: `✅ Match recorded. Winner: **${winner.username}**`, components: [] });
 
-    // Save to history channel
-    const historyChannel = channel.guild.channels.cache.find(c => c.name === "history" && c.isTextBased());
-    if (historyChannel) {
-      const historyEmbed = new EmbedBuilder()
-        .setTitle("📜 Match History")
-        .setDescription(`${winner} defeated ${loser}\n**Stage:** ${stage}\n**Characters:** ${winner} → ${characters[winner.id]}, ${loser} → ${characters[loser.id]}\n**ELO Change:** ${winnerElo} → ${newWinner}, ${loserElo} → ${newLoser}`)
-        .setColor(0x00aeff)
-        .setTimestamp();
-      await historyChannel.send({ embeds: [historyEmbed] });
-    }
+    const historyEmbed = new EmbedBuilder()
+      .setTitle("📜 Match History")
+      .setDescription(`${winner} defeated ${loser}\n**Stage:** ${stage}\n**Characters:** ${winner} → ${characters[winner.id]}, ${loser} → ${characters[loser.id]}\n**ELO Change:** ${winnerElo} → ${newWinner}, ${loserElo} → ${newLoser}`)
+      .setColor(0x00aeff)
+      .setTimestamp();
 
+    if (historyChannel) await historyChannel.send({ embeds: [historyEmbed] });
     await require("./main").updateLeaderboard(channel.guild, points, config);
   });
 
@@ -160,3 +181,4 @@ async function logMatch(client, channel, player1, player2, characters, stage, po
     if (reason !== "limit") channel.send("⏰ Match reporting timed out.");
   });
 }
+
