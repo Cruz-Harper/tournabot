@@ -27,7 +27,7 @@ function calculateElo(winnerRating, loserRating) {
   return [Math.round(newWinner), Math.round(newLoser)];
 }
 
-// -------------------- Leaderboard Embed --------------------
+// -------------------- Leaderboard --------------------
 function parsePointsFromEmbed(embed) {
   const points = {};
   if (!embed?.description) return points;
@@ -62,14 +62,11 @@ async function fetchConfig(guild) {
   const defaultConfig = { pointsChannelId: null, pointsMessageId: null };
   const configChannel = guild.channels.cache.find(c => c.name === 'channel-id' && c.isTextBased());
   if (!configChannel) return defaultConfig;
-
   const messages = await configChannel.messages.fetch({ limit: 1 }).catch(() => null);
   if (!messages || messages.size === 0) return defaultConfig;
-
   const content = messages.first().content;
   const parts = content.split(',');
   if (parts.length < 2) return defaultConfig;
-
   return {
     pointsChannelId: parts[0].trim(),
     pointsMessageId: parts[1].trim(),
@@ -85,10 +82,8 @@ async function saveConfig(guild, config) {
       permissionOverwrites: [{ id: guild.roles.everyone.id, deny: ['ViewChannel'] }],
     });
   }
-
   const messages = await configChannel.messages.fetch({ limit: 10 }).catch(() => null);
   if (messages) for (const msg of messages.values()) await msg.delete().catch(() => {});
-
   const line = `${config.pointsChannelId},${config.pointsMessageId}`;
   await configChannel.send(line).catch(() => {});
 }
@@ -114,7 +109,7 @@ async function updateLeaderboard(guild, points, config) {
   await saveConfig(guild, config);
 }
 
-// -------------------- Ensure History --------------------
+// -------------------- History --------------------
 async function ensureHistoryChannel(guild) {
   let historyChannel = guild.channels.cache.find(c => c.name === 'history' && c.isTextBased());
   if (!historyChannel) {
@@ -125,6 +120,19 @@ async function ensureHistoryChannel(guild) {
     }).catch(() => null);
   }
   return historyChannel;
+}
+
+// Paginated history sender
+async function sendPaginatedHistory(channel, entries, pageSize = 5) {
+  for (let i = 0; i < entries.length; i += pageSize) {
+    const page = entries.slice(i, i + pageSize).join("\n");
+    const embed = new EmbedBuilder()
+      .setTitle(`📜 Match History (Page ${Math.floor(i/pageSize)+1})`)
+      .setDescription(page)
+      .setColor(0x00aeff)
+      .setTimestamp();
+    await channel.send({ embeds: [embed] }).catch(() => {});
+  }
 }
 
 // -------------------- Ready --------------------
@@ -171,6 +179,22 @@ client.on('messageCreate', async message => {
       break;
     }
 
+    case 'match': {
+      if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+      if (args[0] === 'force') {
+        const winner = message.mentions.members.first();
+        const loser = message.mentions.members.at(1);
+        if (!winner || !loser) return message.reply("❌ Mention both winner and loser.");
+        const [newWinner, newLoser] = calculateElo(points[winner.displayName] || 1200, points[loser.displayName] || 1200);
+        points[winner.displayName] = newWinner;
+        points[loser.displayName] = newLoser;
+        await updateLeaderboard(guild, points, config);
+        await historyChannel.send(`⚡ Admin override: **${winner}** defeated **${loser}**`).catch(() => {});
+        return message.reply(`✅ Forced win: ${winner} over ${loser}`);
+      }
+      break;
+    }
+
     case 'getpoints': {
       const target = mention || message.member;
       const name = target.displayName;
@@ -200,10 +224,11 @@ client.on('messageCreate', async message => {
       if (!target) return message.reply('❌ Invalid user.');
       const messages = await historyChannel.messages.fetch({ limit: 100 }).catch(() => null);
       if (!messages || messages.size === 0) return message.reply('⚠️ No match history found.');
-
-      const userEmbeds = messages.filter(msg => msg.embeds.length && msg.embeds[0].description?.includes(target.displayName));
-      if (userEmbeds.size === 0) return message.reply('⚠️ No match history found for this user.');
-      return message.reply({ embeds: userEmbeds.map(msg => msg.embeds[0]) });
+      const entries = messages
+        .filter(msg => msg.embeds.length && msg.embeds[0].description?.includes(target.displayName))
+        .map(msg => msg.embeds[0].description);
+      if (entries.length === 0) return message.reply('⚠️ No match history found for this user.');
+      return sendPaginatedHistory(message.channel, entries);
     }
 
     case 'ping': return message.reply(`🏓 Pong! ${client.ws.ping}ms`);
@@ -213,6 +238,7 @@ client.on('messageCreate', async message => {
         embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
 \`,setchannel #channel\` — Set leaderboard channel
 \`,startmatch @opponent\` — Start a match with UI
+\`,match force @winner @loser\` — Admin override
 \`,getpoints [@user]\` — Show user's ELO
 \`,history [@user]\` — Show match history of a user
 \`,top\` — Show server leaderboard
@@ -230,4 +256,3 @@ client.on('messageCreate', async message => {
 client.login(process.env.TOKEN5);
 
 module.exports = { calculateElo, updateLeaderboard };
-
