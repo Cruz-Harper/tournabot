@@ -14,7 +14,7 @@ const {
 } = require('discord.js');
 const { createCanvas } = require('canvas');
 
-require('./smashLadder.js');
+require('./SmashLadder.js');
 
 const client = new Client({
   intents: [
