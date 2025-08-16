@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
-const ui = require('./ui.js'); // make sure this exists
+const ui = require('./ui.js');
 
 const client = new Client({
   intents: [
@@ -12,35 +12,24 @@ const client = new Client({
 });
 
 const prefix = ',';
-const K = 32; // Fixed K-factor
-const lastWinTime = {};
-const CREATOR_ID = "1364776113922117695"; // Creator's Discord ID
+const K = 32; 
+const CREATOR_ID = "1364776113922117695";
 
 // -------------------- ELO Functions --------------------
-function expectedScore(ratingA, ratingB) {
-  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-}
-
+function expectedScore(rA, rB) { return 1 / (1 + Math.pow(10, (rB - rA) / 400)); }
 function calculateElo(winnerRating, loserRating) {
-  const expectedWin = expectedScore(winnerRating, loserRating);
-  const expectedLose = expectedScore(loserRating, winnerRating);
-  const newWinner = winnerRating + K * (1 - expectedWin);
-  const newLoser = loserRating + K * (0 - expectedLose);
+  const newWinner = winnerRating + K * (1 - expectedScore(winnerRating, loserRating));
+  const newLoser = loserRating + K * (0 - expectedScore(loserRating, winnerRating));
   return [Math.round(newWinner), Math.round(newLoser)];
 }
 
-// -------------------- Points Parsing/Building --------------------
+// -------------------- Points --------------------
 function parsePointsFromEmbed(embed) {
   const points = {};
-  if (!embed || !embed.description) return points;
-  const lines = embed.description.split('\n');
-  for (const line of lines) {
+  if (!embed?.description) return points;
+  for (const line of embed.description.split('\n')) {
     const match = line.match(/^\d+\.\s\*\*(.+?)\*\*\s—\s(\d+)\spts$/);
-    if (match) {
-      const name = match[1];
-      const pts = parseInt(match[2]);
-      if (!isNaN(pts)) points[name] = pts;
-    }
+    if (match) points[match[1]] = parseInt(match[2]);
   }
   return points;
 }
@@ -48,38 +37,25 @@ function parsePointsFromEmbed(embed) {
 function buildPointsEmbed(points, guild, title = '📊 Points Leaderboard') {
   const members = guild.members?.cache || new Map();
   const entries = Object.entries(points)
-    .map(([name, pts]) => {
-      const member = members.find?.(m => m.displayName === name);
-      return member ? { name: member.displayName, pts } : { name, pts };
-    })
-    .filter(Boolean)
+    .map(([name, pts]) => ({ name: members.find?.(m => m.displayName === name)?.displayName || name, pts }))
     .sort((a, b) => b.pts - a.pts);
-  const description = entries.map((entry, i) => `${i + 1}. **${entry.name}** — ${entry.pts} pts`).join('\n');
   return new EmbedBuilder()
     .setTitle(title)
     .setColor(0x00aeff)
-    .setDescription(description || '*No points yet.*')
+    .setDescription(entries.map((e, i) => `${i + 1}. **${e.name}** — ${e.pts} pts`).join('\n') || '*No points yet.*')
     .setFooter({ text: 'ELO ratings are adaptive!' })
     .setTimestamp();
 }
 
-// -------------------- Config Fetch/Save --------------------
+// -------------------- Config --------------------
 async function fetchConfig(guild) {
   const defaultConfig = { pointsChannelId: null, pointsMessageId: null };
   const configChannel = guild.channels.cache.find(c => c.name === 'channel-id' && c.isTextBased());
   if (!configChannel) return defaultConfig;
-
-  const messages = await configChannel.messages.fetch({ limit: 1 }).catch(() => null);
-  if (!messages || messages.size === 0) return defaultConfig;
-
-  const content = messages.first().content;
-  const parts = content.split(',');
-  if (parts.length < 2) return defaultConfig;
-
-  return {
-    pointsChannelId: parts[0].trim(),
-    pointsMessageId: parts[1].trim(),
-  };
+  const msg = (await configChannel.messages.fetch({ limit: 1 }).catch(() => null))?.first();
+  if (!msg) return defaultConfig;
+  const [chanId, msgId] = msg.content.split(',').map(s => s.trim());
+  return { pointsChannelId: chanId || null, pointsMessageId: msgId || null };
 }
 
 async function saveConfig(guild, config) {
@@ -88,25 +64,19 @@ async function saveConfig(guild, config) {
     configChannel = await guild.channels.create({
       name: 'channel-id',
       type: 0,
-      permissionOverwrites: [{ id: guild.roles.everyone.id, deny: ['ViewChannel'] }],
+      permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] }]
     });
   }
-
-  const messages = await configChannel.messages.fetch({ limit: 10 }).catch(() => null);
-  if (messages) for (const msg of messages.values()) await msg.delete().catch(() => {});
-
-  const line = `${config.pointsChannelId},${config.pointsMessageId}`;
-  await configChannel.send(line).catch(() => {});
+  const messages = await configChannel.messages.fetch({ limit: 10 }).catch(() => new Map());
+  for (const m of messages.values()) await m.delete().catch(() => {});
+  await configChannel.send(`${config.pointsChannelId},${config.pointsMessageId}`).catch(() => {});
 }
 
-// -------------------- Fetch/Update Leaderboard --------------------
 async function fetchPoints(config, guild) {
   if (!config.pointsChannelId || !config.pointsMessageId) return {};
   const channel = guild.channels.cache.get(config.pointsChannelId);
-  if (!channel?.isTextBased()) return {};
-  const msg = await channel.messages.fetch(config.pointsMessageId).catch(() => null);
-  if (!msg || msg.embeds.length === 0) return {};
-  return parsePointsFromEmbed(msg.embeds[0]);
+  const msg = await channel?.messages.fetch(config.pointsMessageId).catch(() => null);
+  return msg?.embeds?.[0] ? parsePointsFromEmbed(msg.embeds[0]) : {};
 }
 
 async function updateLeaderboard(guild, points, config) {
@@ -119,17 +89,17 @@ async function updateLeaderboard(guild, points, config) {
   await saveConfig(guild, config);
 }
 
-// -------------------- Ensure #history --------------------
+// -------------------- History --------------------
 async function ensureHistoryChannel(guild) {
-  let historyChannel = guild.channels.cache.find(c => c.name === 'history' && c.isTextBased());
-  if (!historyChannel) {
-    historyChannel = await guild.channels.create({
+  let ch = guild.channels.cache.find(c => c.name === 'history' && c.isTextBased());
+  if (!ch) {
+    ch = await guild.channels.create({
       name: 'history',
       type: 0,
-      permissionOverwrites: [{ id: guild.roles.everyone.id, allow: ['ViewChannel'] }]
+      permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel] }]
     }).catch(() => null);
   }
-  return historyChannel;
+  return ch;
 }
 
 // -------------------- Ready --------------------
@@ -156,7 +126,6 @@ client.on('messageCreate', async message => {
   const historyChannel = await ensureHistoryChannel(guild);
 
   switch (cmd.toLowerCase()) {
-
     case 'setchannel': {
       if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only.');
       const chan = message.mentions.channels.first();
@@ -172,19 +141,14 @@ client.on('messageCreate', async message => {
     case 'startmatch': {
       if (!mention) return message.reply("❌ Mention your opponent. Example: `,startmatch @opponent`");
       if (mention.id === message.member.id) return message.reply("❌ You cannot play against yourself.");
-      const player1 = message.member;
-      const player2 = mention;
-      await ui.startMatch(client, message.channel, player1, player2, points, config, historyChannel);
+      await ui.startMatch(client, message.channel, message.member, mention, points, config, historyChannel);
       break;
     }
 
     case 'getpoints': {
       const target = mention || message.member;
-      const name = target.displayName;
-      const score = points[name] || 1200;
-      return message.reply({
-        embeds: [new EmbedBuilder().setTitle(`📈 ${name}'s ELO`).setColor(0x00ff99).setDescription(`**${score}** pts`).setTimestamp()],
-      });
+      const score = points[target.displayName] || 1200;
+      return message.reply({ embeds: [new EmbedBuilder().setTitle(`📈 ${target.displayName}'s ELO`).setColor(0x00ff99).setDescription(`**${score}** pts`).setTimestamp()] });
     }
 
     case 'top': return message.reply({ embeds: [buildPointsEmbed(points, guild)] });
@@ -204,20 +168,16 @@ client.on('messageCreate', async message => {
 
     case 'history': {
       const target = mention || message.member;
-      if (!target) return message.reply('❌ Invalid user.');
-      const messages = await historyChannel.messages.fetch({ limit: 100 }).catch(() => null);
-      if (!messages || messages.size === 0) return message.reply('⚠️ No match history found.');
-
-      const userEmbeds = messages.filter(msg => msg.embeds.length && msg.embeds[0].description?.includes(target.displayName));
-      if (userEmbeds.size === 0) return message.reply('⚠️ No match history found for this user.');
-      return message.reply({ embeds: userEmbeds.map(msg => msg.embeds[0]) });
+      const msgs = await historyChannel.messages.fetch({ limit: 100 }).catch(() => new Map());
+      const userEmbeds = msgs.filter(m => m.embeds?.[0]?.description?.includes(target.displayName));
+      if (!userEmbeds.size) return message.reply('⚠️ No match history found for this user.');
+      return message.reply({ embeds: userEmbeds.map(m => m.embeds[0]) });
     }
 
     case 'ping': return message.reply(`🏓 Pong! ${client.ws.ping}ms`);
 
-    case 'help': {
-      return message.reply({
-        embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
+    case 'help': return message.reply({
+      embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
 \`,setchannel #channel\` — Set leaderboard channel
 \`,startmatch @opponent\` — Start a match with UI
 \`,getpoints [@user]\` — Show user's ELO
@@ -226,13 +186,11 @@ client.on('messageCreate', async message => {
 \`,worldtop\` — Show global leaderboard
 \`,ping\` — Bot ping
 \`,help\` — This help message
-      `)],
-      });
-    }
+      `)]
+    });
 
     default: return message.reply('❓ Unknown command. Use `,help`.');
   }
 });
 
 client.login(process.env.TOKEN5);
-
