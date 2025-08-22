@@ -179,31 +179,28 @@ client.on('messageCreate', async message => {
       break;
     }
 
-    case 'match': {
+    case 'matchforce': {
       if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-      if (args[0] === 'force') {
-        const winner = message.mentions.members.first();
-        const loser = message.mentions.members.at(1);
-        if (!winner || !loser) return message.reply("❌ Mention both winner and loser.");
+      const winner = message.mentions.members.first();
+      const loser = message.mentions.members.at(1);
+      if (!winner || !loser) return message.reply("❌ Mention both winner and loser.");
 
-        const [newWinner, newLoser] = calculateElo(points[winner.displayName] || 1200, points[loser.displayName] || 1200);
-        points[winner.displayName] = newWinner;
-        points[loser.displayName] = newLoser;
+      const [newWinner, newLoser] = calculateElo(points[winner.displayName] || 1200, points[loser.displayName] || 1200);
+      points[winner.displayName] = newWinner;
+      points[loser.displayName] = newLoser;
 
-        // Update leaderboard
-        await updateLeaderboard(guild, points, config);
+      // Update leaderboard
+      await updateLeaderboard(guild, points, config);
 
-        // Log in history
-        const embed = new EmbedBuilder()
-          .setTitle("⚡ Admin Override Result")
-          .setDescription(`**${winner.displayName}** defeated **${loser.displayName}**`)
-          .setColor(0xff5555)
-          .setTimestamp();
-        await historyChannel.send({ embeds: [embed] }).catch(() => {});
+      // Log in history
+      const embed = new EmbedBuilder()
+        .setTitle("⚡ Admin Override Result")
+        .setDescription(`**${winner.displayName}** defeated **${loser.displayName}**`)
+        .setColor(0xff5555)
+        .setTimestamp();
+      await historyChannel.send({ embeds: [embed] }).catch(() => {});
 
-        return message.reply(`✅ Forced win: ${winner} over ${loser}`);
-      }
-      break;
+      return message.reply(`✅ Forced win: ${winner} over ${loser}`);
     }
 
     case 'getpoints': {
@@ -248,7 +245,7 @@ client.on('messageCreate', async message => {
         embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
 \`,setchannel #channel\` — Set leaderboard channel  
 \`,startmatch @opponent\` — Start a match with UI  
-\`,match force @winner @loser\` — Admin override  
+\`,matchforce @winner @loser\` — Admin override  
 \`,getpoints [@user]\` — Show user's ELO  
 \`,history [@user]\` — Show match history of a user  
 \`,top\` — Show server leaderboard  
