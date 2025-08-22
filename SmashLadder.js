@@ -125,10 +125,10 @@ async function ensureHistoryChannel(guild) {
 // Paginated history sender
 async function sendPaginatedHistory(channel, entries, pageSize = 5) {
   for (let i = 0; i < entries.length; i += pageSize) {
-    const page = entries.slice(i, i + pageSize).join("\n");
+    const page = entries.slice(i, i + pageSize);
     const embed = new EmbedBuilder()
       .setTitle(`📜 Match History (Page ${Math.floor(i/pageSize)+1})`)
-      .setDescription(page)
+      .setDescription(page.join("\n"))
       .setColor(0x00aeff)
       .setTimestamp();
     await channel.send({ embeds: [embed] }).catch(() => {});
@@ -152,7 +152,6 @@ client.once('ready', async () => {
 client.on('messageCreate', async message => {
   if (!message.guild || message.author.bot || !message.content.startsWith(prefix)) return;
   const [cmd, ...args] = message.content.slice(prefix.length).trim().split(/\s+/);
-  const mention = message.mentions.members.first();
   const guild = message.guild;
   const config = await fetchConfig(guild);
   const points = await fetchPoints(config, guild);
@@ -173,9 +172,10 @@ client.on('messageCreate', async message => {
     }
 
     case 'startmatch': {
-      if (!mention) return message.reply("❌ Mention your opponent. Example: `,startmatch @opponent`");
-      if (mention.id === message.member.id) return message.reply("❌ You cannot play against yourself.");
-      await ui.startMatch(client, message.channel, message.member, mention, points, config, historyChannel);
+      const opponent = message.mentions.members.first();
+      if (!opponent) return message.reply("❌ Mention your opponent. Example: `,startmatch @opponent`");
+      if (opponent.id === message.member.id) return message.reply("❌ You cannot play against yourself.");
+      await ui.startMatch(client, message.channel, message.member, opponent, points, config, historyChannel);
       break;
     }
 
@@ -185,18 +185,29 @@ client.on('messageCreate', async message => {
         const winner = message.mentions.members.first();
         const loser = message.mentions.members.at(1);
         if (!winner || !loser) return message.reply("❌ Mention both winner and loser.");
+
         const [newWinner, newLoser] = calculateElo(points[winner.displayName] || 1200, points[loser.displayName] || 1200);
         points[winner.displayName] = newWinner;
         points[loser.displayName] = newLoser;
+
+        // Update leaderboard
         await updateLeaderboard(guild, points, config);
-        await historyChannel.send(`⚡ Admin override: **${winner}** defeated **${loser}**`).catch(() => {});
+
+        // Log in history
+        const embed = new EmbedBuilder()
+          .setTitle("⚡ Admin Override Result")
+          .setDescription(`**${winner.displayName}** defeated **${loser.displayName}**`)
+          .setColor(0xff5555)
+          .setTimestamp();
+        await historyChannel.send({ embeds: [embed] }).catch(() => {});
+
         return message.reply(`✅ Forced win: ${winner} over ${loser}`);
       }
       break;
     }
 
     case 'getpoints': {
-      const target = mention || message.member;
+      const target = message.mentions.members.first() || message.member;
       const name = target.displayName;
       const score = points[name] || 1200;
       return message.reply({
@@ -220,8 +231,7 @@ client.on('messageCreate', async message => {
     }
 
     case 'history': {
-      const target = mention || message.member;
-      if (!target) return message.reply('❌ Invalid user.');
+      const target = message.mentions.members.first() || message.member;
       const messages = await historyChannel.messages.fetch({ limit: 100 }).catch(() => null);
       if (!messages || messages.size === 0) return message.reply('⚠️ No match history found.');
       const entries = messages
@@ -236,15 +246,15 @@ client.on('messageCreate', async message => {
     case 'help': {
       return message.reply({
         embeds: [new EmbedBuilder().setTitle('📘 Commands').setColor(0x8888ff).setDescription(`
-\`,setchannel #channel\` — Set leaderboard channel
-\`,startmatch @opponent\` — Start a match with UI
-\`,match force @winner @loser\` — Admin override
-\`,getpoints [@user]\` — Show user's ELO
-\`,history [@user]\` — Show match history of a user
-\`,top\` — Show server leaderboard
-\`,worldtop\` — Show global leaderboard
-\`,ping\` — Bot ping
-\`,help\` — This help message
+\`,setchannel #channel\` — Set leaderboard channel  
+\`,startmatch @opponent\` — Start a match with UI  
+\`,match force @winner @loser\` — Admin override  
+\`,getpoints [@user]\` — Show user's ELO  
+\`,history [@user]\` — Show match history of a user  
+\`,top\` — Show server leaderboard  
+\`,worldtop\` — Show global leaderboard  
+\`,ping\` — Bot ping  
+\`,help\` — This help message  
       `)],
       });
     }
