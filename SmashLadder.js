@@ -12,7 +12,7 @@ const client = new Client({
 });
 
 const prefix = ',';
-const K = 32; // ELO K-factor
+const K = 32; // K-factor just learned this shit T-T
 
 // -------------------- ELO Functions --------------------
 function expectedScore(ratingA, ratingB) {
@@ -137,7 +137,7 @@ async function sendPaginatedHistory(channel, entries, pageSize = 5) {
 
 // -------------------- Ready --------------------
 client.once('ready', async () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user.tag}`);
   for (const guild of client.guilds.cache.values()) {
     await guild.channels.fetch().catch(() => {});
     await guild.members.fetch().catch(() => {});
@@ -168,7 +168,7 @@ client.on('messageCreate', async message => {
       config.pointsChannelId = chan.id;
       config.pointsMessageId = msg?.id || null;
       await saveConfig(guild, config);
-      return message.reply('✅ Points channel set.');
+      return message.reply('Points channel set.');
     }
 
     case 'startmatch': {
@@ -200,7 +200,7 @@ client.on('messageCreate', async message => {
         .setTimestamp();
       await historyChannel.send({ embeds: [embed] }).catch(() => {});
 
-      return message.reply(`✅ Forced win: ${winner} over ${loser}`);
+      return message.reply(`Forced win: ${winner} over ${loser}`);
     }
 
     case 'getpoints': {
@@ -256,7 +256,7 @@ client.on('messageCreate', async message => {
       });
     }
 
-    default: return message.reply('❓ Unknown command. Use `,help`.');
+    default: return message.reply('Unknown command. Use `,help`.');
   }
 });
 
