@@ -6,7 +6,10 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   ComponentType,
-  EmbedBuilder
+  EmbedBuilder,
+  ModalBuider,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 // -------------------- Safety Helpers --------------------
@@ -77,16 +80,7 @@ const counterpickStages = [
 
 // -------------------- Public API --------------------
 module.exports = {
-  /**
-   * Starts a ranked set between two players.
-   * @param {Client} client
-   * @param {TextChannel} channel
-   * @param {GuildMember|User} player1
-   * @param {GuildMember|User} player2
-   * @param {Object} points - ELO map keyed by display name
-   * @param {Object} config - your config object
-   * @param {TextChannel} historyChannel - #history
-   */
+ 
   async startMatch(client, channel, player1, player2, points, config, historyChannel) {
     // Basic guards
     if (!client || !channel || !player1 || !player2) {
@@ -194,79 +188,137 @@ async function characterSelection(client, channel, player1, player2, points, con
   const p1Name = safeUsername(player1, "Player 1");
   const p2Name = safeUsername(player2, "Player 2");
 
-  const makeCharRows = (user) => {
-    const chunks = chunk(fighters, 25);
-    return chunks.map((c, idx) =>
-      new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId(`char_${safeId(user)}_${idx}`)
-          .setPlaceholder(`Select your character (${safeUsername(user)})`)
-          .addOptions(c.map(f => ({ label: String(f), value: String(f) })))
-      )
-    );
-  };
-
   const embed = new EmbedBuilder()
     .setTitle(`🎮 Character Selection — Game ${gameNumber}`)
-    .setDescription("Pick your character from the menus below.")
+    .setDescription("Click the button below to search for your character.")
     .setColor(0x00ff99);
 
-  const p1Msg = await safeSend(channel, { content: safeMention(player1), embeds: [embed], components: makeCharRows(player1) });
-  const p2Msg = await safeSend(channel, { content: safeMention(player2), embeds: [embed], components: makeCharRows(player2) });
+  // Create buttons that open modals
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`char_search_${p1Id}`)
+      .setLabel(`🔍 ${p1Name}`)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`char_search_${p2Id}`)
+      .setLabel(`🔍 ${p2Name}`)
+      .setStyle(ButtonStyle.Primary)
+  );
 
-  if (!p1Msg || !p2Msg) return;
+  const msg = await safeSend(channel, { embeds: [embed], components: [row] });
+  if (!msg) return;
 
   const selected = {}; // id -> character
 
-  const collector = channel.createMessageComponentCollector({
-    componentType: ComponentType.StringSelect,
+  // Handle button clicks → show modal
+  const buttonCollector = msg.createMessageComponentCollector({
+    componentType: ComponentType.Button,
     time: TEN_MIN
   });
 
-  collector.on("collect", async i => {
-    // Only allow either player to select
-    if (i.user.id !== p1Id && i.user.id !== p2Id) {
+  buttonCollector.on("collect", async i => {
+    const userId = i.user.id;
+
+    // Verify it's one of the players
+    if (userId !== p1Id && userId !== p2Id) {
       return i.reply({ content: "❌ You are not part of this match.", flags: 64 }).catch(() => {});
     }
 
     // Prevent double selection
-    if (selected[i.user.id]) {
+    if (selected[userId]) {
       return i.reply({ content: "✅ You already selected your character.", flags: 64 }).catch(() => {});
     }
 
-    const choice = (i.values && i.values[0]) ? String(i.values[0]) : null;
-    if (!choice) {
-      return i.reply({ content: "⚠️ Invalid selection.", flags: 64 }).catch(() => {});
+    // Create and show the modal
+    const modal = new ModalBuilder()
+      .setCustomId(`char_modal_${userId}`)
+      .setTitle(`Select Character (${safeUsername(userId === p1Id ? player1 : player2)})`)
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("character_input")
+            .setLabel("Search for your character")
+            .setStyle("Short")
+            .setPlaceholder("e.g., Mario, Pikachu, Cloud")
+            .setRequired(true)
+        )
+      );
+
+    await i.showModal(modal);
+  });
+
+  // Handle modal submissions
+  const modalCollector = channel.createMessageComponentCollector({
+    componentType: ComponentType.ModalSubmit,
+    time: TEN_MIN
+  });
+
+  modalCollector.on("collect", async i => {
+    if (!i.customId.startsWith("char_modal_")) return;
+
+    const userId = i.customId.split("_")[2];
+    const input = i.fields.getTextInputValue("character_input").trim();
+
+    // Case-insensitive search
+    const match = fighters.find(f => f.toLowerCase() === input.toLowerCase());
+
+    if (!match) {
+      // Show close matches as suggestions
+      const suggestions = fighters
+        .filter(f => f.toLowerCase().includes(input.toLowerCase()))
+        .slice(0, 5);
+
+      const msg = suggestions.length > 0
+        ? `❌ "${input}" not found. Did you mean: ${suggestions.join(", ")}?`
+        : `❌ "${input}" not found. Check the character list.`;
+
+      return i.reply({ content: msg, flags: 64 }).catch(() => {});
     }
 
-    selected[i.user.id] = choice;
+    selected[userId] = match;
 
-    // Disable ALL menus for that user
+    await i.reply({ content: `✅ ${safeUsername(userId === p1Id ? player1 : player2)} selected **${match}**.`, flags: 64 }).catch(() => {});
+
+    // Update the original message
     try {
-      await i.update({ content: `${safeMention(i.user)} selected **${choice}**.`, components: [] });
-    } catch { /* ignore */ }
+      const selectedText = [
+        selected[p1Id] ? `**${safeUsername(player1)}:** ${selected[p1Id]} ✅` : `**${safeUsername(player1)}:** Waiting...`,
+        selected[p2Id] ? `**${safeUsername(player2)}:** ${selected[p2Id]} ✅` : `**${safeUsername(player2)}:** Waiting...`
+      ].join("\n");
+
+      const updatedEmbed = new EmbedBuilder()
+        .setTitle(`🎮 Character Selection — Game ${gameNumber}`)
+        .setDescription(selectedText)
+        .setColor(0x00ff99);
+
+      await msg.edit({ embeds: [updatedEmbed] });
+    } catch {}
 
     // When both have chosen
     if (selected[p1Id] && selected[p2Id]) {
-      collector.stop("both_chosen");
+      buttonCollector.stop("both_chosen");
+      modalCollector.stop("both_chosen");
     }
   });
 
-  collector.on("end", async (_collected, reason) => {
-    try { await p1Msg.edit({ components: [] }).catch(() => {}); } catch {}
-    try { await p2Msg.edit({ components: [] }).catch(() => {}); } catch {}
-
-    if (reason !== "both_chosen") {
-      await safeSend(channel, "⏰ Character selection timed out.");
-      return;
-    }
-
-    if (gameNumber === 1) {
-      await stageBanGame1(client, channel, player1, player2, selected, points, config, historyChannel, wins, requiredWins, gameNumber);
-    } else {
-      await counterpickFlow(client, channel, player1, player2, selected, points, config, historyChannel, wins, requiredWins, gameNumber);
-    }
+  // Wait for timeout
+  await new Promise((resolve) => {
+    buttonCollector.on("end", (_collected, reason) => {
+      if (reason === "both_chosen") resolve();
+    });
+    setTimeout(() => resolve(), TEN_MIN);
   });
+
+  if (!selected[p1Id] || !selected[p2Id]) {
+    await safeSend(channel, "⏰ Character selection timed out.");
+    return;
+  }
+
+  if (gameNumber === 1) {
+    await stageBanGame1(client, channel, player1, player2, selected, points, config, historyChannel, wins, requiredWins, gameNumber);
+  } else {
+    await counterpickFlow(client, channel, player1, player2, selected, points, config, historyChannel, wins, requiredWins, gameNumber);
+  }
 }
 
 // -------------------- Game 1 1-2-1 Bans --------------------
@@ -310,7 +362,7 @@ async function stageBanGame1(client, channel, player1, player2, characters, poin
         time: TEN_MIN,
         max: 1
       });
-
+      // FIXME: Nga why is ts so messy T-T
       c.on("collect", async i => {
         if (i.user.id !== currentId) {
           return i.reply({ content: "❌ It's not your turn to ban.", flags: 64 }).catch(() => {});
@@ -391,7 +443,7 @@ async function counterpickFlow(client, channel, player1, player2, characters, po
         time: TEN_MIN,
         max: 1
       });
-
+      // Needs cleaned uppp
       c.on("collect", async i => {
         if (i.user.id !== safeId(lastWinner)) {
           return i.reply({ content: "❌ Only the previous game winner can ban.", flags: 64 }).catch(() => {});
